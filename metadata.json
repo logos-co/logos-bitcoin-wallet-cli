@@ -1,0 +1,30 @@
+{
+  "name": "bitcoin_wallet_cli",
+  "display_name": "Bitcoin Wallet CLI",
+  "version": "0.1.0",
+  "type": "core",
+  "interface": "cdylib",
+  "concurrency": "multi",
+  "category": "wallet",
+  "description": "Headless Bitcoin wallet sessions for logosctl: relays to bitcoin_wallet_backend as itself, prompts when a send awaits approval in evm_signer_cli, and names the configure that admits it. Never handles a password.",
+  "author": "Logos Core Team",
+  "main": "bitcoin_wallet_cli_plugin",
+  "dependencies": ["bitcoin_wallet_backend"],
+  "dependency_overrides": {
+    "bitcoin_wallet_backend": { "file": "contracts/bitcoin_wallet_backend.lidl" }
+  },
+  "include": [],
+  "capabilities": [],
+  "codegen": {
+    "rust": { "crate": "rust-lib", "trait": "BitcoinWalletCliModule", "source": "src/glue.rs" }
+  },
+  "nix": {
+    "rust": {
+      "toolchain": "1.96.0",
+      "packages": { "build": [], "runtime": [] }
+    },
+    "external_libraries": [],
+    "packages": { "build": [], "runtime": [] },
+    "cmake": { "find_packages": [], "extra_include_dirs": [] }
+  }
+}

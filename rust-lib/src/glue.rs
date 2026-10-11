@@ -34,6 +34,8 @@ pub trait BitcoinWalletCliModule: Send + Sync + 'static {
     fn parse_btc(&self, btc: String) -> String;
     fn sources(&self) -> String;
     fn source_health(&self) -> String;
+    /// `{ network?, source }`: probes a source now ("" for every enabled server), with its certificate.
+    fn probe(&self, params_json: String) -> String;
     fn exposure(&self) -> String;
     fn job_status(&self, job_id: String) -> String;
     fn send_status(&self, request_id: String) -> String;
@@ -46,6 +48,8 @@ pub trait BitcoinWalletCliModule: Send + Sync + 'static {
     fn open_wallet(&self, params_json: String) -> String;
     fn close_wallet(&self) -> String;
     fn descriptors(&self) -> String;
+    /// `{ date: "YYYY-MM-DD" }` or `{ height }`: the open wallet scans again from there.
+    fn set_birthday(&self, params_json: String) -> String;
     fn set_sources(&self, list_json: String) -> String;
     fn set_source(&self, source_id: String, changes_json: String) -> String;
     fn set_proxy(&self, proxy: String) -> String;
@@ -231,6 +235,9 @@ impl BitcoinWalletCliModule for BitcoinWalletCliModuleImpl {
     fn source_health(&self) -> String {
         read(call!(source_health_async_with_timeout))
     }
+    fn probe(&self, params_json: String) -> String {
+        read(call!(probe_async_with_timeout, &params_json))
+    }
     fn exposure(&self) -> String {
         read(call!(exposure_async_with_timeout))
     }
@@ -280,6 +287,9 @@ impl BitcoinWalletCliModule for BitcoinWalletCliModuleImpl {
     }
     fn descriptors(&self) -> String {
         custodian(call!(descriptors_async_with_timeout))
+    }
+    fn set_birthday(&self, params_json: String) -> String {
+        custodian(call!(set_birthday_async_with_timeout, &params_json))
     }
     fn set_sources(&self, list_json: String) -> String {
         custodian(call!(set_sources_async_with_timeout, &list_json))

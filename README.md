@@ -42,7 +42,9 @@ logosctl call bitcoin_wallet_cli send_status s1
 ```
 
 `send <address> <BTC>` asks for one payment at the normal fee target; `request_send` takes the
-backend's whole document. Amounts that look like numbers need `str:`, or `logosctl` passes a
+backend's whole document, `smallChangeToFee` included, and `show` says when change went to the fee.
+`set_birthday '{"height":…}'` (or `{"date":"YYYY-MM-DD"}`) gives a restored wallet a birthday, and
+`probe '{"source":"…"}'` checks a source now, with its certificate. Amounts that look like numbers need `str:`, or `logosctl` passes a
 number and the call is refused.
 
 ## Events

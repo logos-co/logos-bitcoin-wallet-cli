@@ -8,6 +8,11 @@ fn s<'a>(v: &'a Value, k: &str) -> &'a str {
 
 const WIDTH: usize = 64;
 
+/// Satoshis as BTC with 8 decimals; an unreadable amount stays as given.
+fn btc(sat: &str) -> String {
+    sat.parse::<u64>().map(|v| format!("{}.{:08}", v / 100_000_000, v % 100_000_000)).unwrap_or_else(|_| sat.to_string())
+}
+
 fn rule(c: char) -> String {
     std::iter::repeat_n(c, WIDTH).collect::<String>() + "\n"
 }
@@ -27,6 +32,11 @@ fn money_lines(out: &mut String, summary: &Value) {
         out.push_str(&format!("  Replaces {r}\n"));
     }
     for w in summary["warnings"].as_array().into_iter().flatten() {
+        if w["kind"] == "change_to_fee" {
+            let sat = w["amountSat"].as_str().unwrap_or_default();
+            out.push_str(&format!("  To fee:  {} BTC of change, worth less than it costs to spend, is in the fee\n", btc(sat)));
+            continue;
+        }
         out.push_str(&format!("  ! {}\n", w["message"].as_str().or(w.as_str()).unwrap_or("a warning")));
     }
 }
@@ -126,6 +136,12 @@ mod tests {
         assert!(t.contains("! The change is worth less"));
         assert!(t.contains("60 s"));
         assert!(!t.to_lowercase().contains("password:"), "the CLI never asks for one");
+        let mut st = awaiting();
+        st["summary"]["change"] = serde_json::json!([]);
+        st["summary"]["warnings"] = serde_json::json!([{"kind": "change_to_fee", "amountSat": "1500", "costToSpendSat": "3400", "message": "…"}]);
+        let t = prompt(&st, "bitcoin_wallet_cli");
+        assert!(t.contains("To fee:  0.00001500 BTC of change"), "{t}");
+        assert!(!t.contains("Change:"), "no change output");
     }
 
     #[test]

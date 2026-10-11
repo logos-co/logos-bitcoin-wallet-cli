@@ -72,13 +72,17 @@ pub fn show(status: &Value, me: &str) -> String {
         out.push_str(&format!("  Broadcast: {b}{}\n", status["via"].as_str().map(|v| format!(" via {v}")).unwrap_or_default()));
     }
     if let Some(e) = status["error"].as_str() {
-        out.push_str(&format!("  {e}\n"));
+        let code = status["errorCode"].as_str().map(|c| format!(" [{c}]")).unwrap_or_default();
+        out.push_str(&format!("  {e}{code}\n"));
     }
-    if s(status, "state") == "unknown" {
+    if s(status, "state") == "unknown" && status["abandoned"] == true {
+        out.push_str("  Abandoned: its coins are free again.\n");
+    } else if s(status, "state") == "unknown" {
         out.push_str(&rule('-'));
         out.push_str(&format!("rebroadcast: logosctl call {me} rebroadcast {id}\n"));
         let txid = status["txid"].as_str().unwrap_or("<txid>");
         out.push_str(&format!("fee bump:    logosctl call {me} request_fee_bump '{{\"txid\":\"{txid}\",\"feeRate\":<sat/vB>}}'\n"));
+        out.push_str(&format!("abandon:     logosctl call {me} abandon_send '{{\"txid\":\"{txid}\"}}'\n"));
     }
     out.push_str(&rule('='));
     out
@@ -132,6 +136,11 @@ mod tests {
         assert!(t.contains("BITCOIN SEND s2: unknown"));
         assert!(t.contains("logosctl call bitcoin_wallet_cli rebroadcast s2"));
         assert!(t.contains(r#"request_fee_bump '{"txid":"ab","feeRate":<sat/vB>}'"#));
+        assert!(t.contains(r#"abandon_send '{"txid":"ab"}'"#));
+        let gone = show(&serde_json::json!({"requestId": "s2", "state": "unknown", "abandoned": true, "txid": "ab", "summary": null}), "bitcoin_wallet_cli");
+        assert!(gone.contains("Abandoned") && !gone.contains("rebroadcast:"));
+        let failed = show(&serde_json::json!({"requestId": "s3", "state": "failed", "error": "rejected", "errorCode": "rejected", "summary": null}), "bitcoin_wallet_cli");
+        assert!(failed.contains("rejected [rejected]"));
         assert!(show(&awaiting(), "bitcoin_wallet_cli").contains("AWAITING APPROVAL"));
     }
 

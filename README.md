@@ -55,7 +55,8 @@ number and the call is refused.
 
 They come from polling `list_sends` once a second, so a send another module asked for is
 announced too. An offer nobody acknowledges within 60 s expires; request the send again. A
-send in `unknown` may have left: `show` offers `rebroadcast` and `request_fee_bump`.
+send in `unknown` may have left: `show` offers `rebroadcast`, `request_fee_bump` and
+`abandon_send '{"txid":"…"}'`, which frees its coins (custodian only).
 
 ## Build and test
 

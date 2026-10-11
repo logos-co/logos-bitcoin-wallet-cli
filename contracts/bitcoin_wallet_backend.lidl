@@ -28,10 +28,11 @@ module bitcoin_wallet_backend {
   method clear_suspect(source_id: tstr) -> tstr description "CUSTODIAN. Clears a suspect mark in the node module and, with a wallet open, in the core."
   method request_send(request_json: tstr) -> tstr description "Any named module. `{ recipients: [{ address, amountSat | amountBtc }], feeRate? | target?,\nsendMax? }` → `{ ok, requestId }`. One open send per wallet."
   method request_fee_bump(request_json: tstr) -> tstr description "Any named module. `{ txid, feeRate }` replaces an unconfirmed send with RBF, approved like\nany send. `{ ok, requestId }`."
-  method send_status(request_id: tstr) -> tstr description "`{ ok, requestId, kind, state, requester, summary, approvalHandle, txid, broadcast, via, error,\ncancelling }`; states preparing, awaiting_approval, committing, sent, failed, cancelled, unknown."
-  method list_sends() -> tstr description "`{ ok, sends: [{ requestId, kind, state, requester, approvalHandle, txid, createdAt, updatedAt }] }`, newest first."
+  method send_status(request_id: tstr) -> tstr description "`{ ok, requestId, kind, state, requester, summary, approvalHandle, txid, broadcast, via, error, errorCode,\ncancelling }`; states preparing, awaiting_approval, committing, sent, failed, cancelled, unknown."
+  method list_sends() -> tstr description "`{ ok, sends: [{ requestId, kind, state, requester, approvalHandle, txid, errorCode, createdAt, updatedAt }] }`, newest first."
   method cancel_send(request_id: tstr) -> tstr description "The requester or a custodian. Withdraws the approval request and unlocks the inputs;\nrefused once the transaction is going out. `{ ok, requestId, state, cancelling }`."
   method rebroadcast(request_or_txid: tstr) -> tstr description "CUSTODIAN. Broadcasts a send's transaction again, named by request id or txid. `{ ok, jobId }`."
+  method abandon_send(params_json: tstr) -> tstr description "CUSTODIAN. `{ txid }` of a send in `unknown`: the core frees its coins. `{ ok, jobId, requestId,\ntxid, note }`; if the original still confirms, a later send from them fails, or replaces it first."
 
   event wallet_state_changed(payload: tstr) description "wallet_status()'s shape, whenever the core's state changes."
   event sync_progress(payload: tstr) description "`{ state, network, walletTip, authorityHeight, tipAgeSecs, percent, synced }`, on change."

@@ -51,6 +51,8 @@ pub trait BitcoinWalletCliModule: Send + Sync + 'static {
     fn set_proxy(&self, proxy: String) -> String;
     fn clear_suspect(&self, source_id: String) -> String;
     fn rebroadcast(&self, request_or_txid: String) -> String;
+    /// `{ txid }` of a send in `unknown`: frees its coins; the reply's `note` says what that risks.
+    fn abandon_send(&self, params_json: String) -> String;
 
     /// `{ recipients: [{ address, amountSat | amountBtc }], feeRate? | target?, sendMax? }`. A
     /// `prompt` event follows once the send awaits approval.
@@ -293,6 +295,9 @@ impl BitcoinWalletCliModule for BitcoinWalletCliModuleImpl {
     }
     fn rebroadcast(&self, request_or_txid: String) -> String {
         custodian(call!(rebroadcast_async_with_timeout, request_or_txid.trim()))
+    }
+    fn abandon_send(&self, params_json: String) -> String {
+        custodian(call!(abandon_send_async_with_timeout, &params_json))
     }
 
     fn request_send(&self, request_json: String) -> String {

@@ -3,6 +3,16 @@
 
 use std::collections::BTreeSet;
 
+/// The poller's next pause: 100 ms after a first unanswered poll, doubling to 5 s; `None` once
+/// the backend answers again.
+pub fn backoff(prev: Option<std::time::Duration>, failed: bool) -> Option<std::time::Duration> {
+    use std::time::Duration;
+    if !failed {
+        return None;
+    }
+    Some(prev.map_or(Duration::from_millis(100), |d| (d * 2).min(Duration::from_secs(5))))
+}
+
 pub fn is_final(state: &str) -> bool {
     matches!(state, "sent" | "failed" | "cancelled" | "unknown")
 }
@@ -117,6 +127,14 @@ mod tests {
         // The backend restarted between two polls and already has a new s1 waiting.
         let t = w.turn(&l(&[("s1", "awaiting_approval", 160)]));
         assert_eq!(t.prompt, vec!["s1".to_string()]);
+    }
+
+    #[test]
+    fn an_unanswered_poll_backs_off_to_five_seconds() {
+        let mut d = None;
+        let seen: Vec<u128> = (0..8).map(|_| { d = backoff(d, true); d.unwrap().as_millis() }).collect();
+        assert_eq!(seen, vec![100, 200, 400, 800, 1600, 3200, 5000, 5000]);
+        assert_eq!(backoff(d, false), None, "an answer resets it");
     }
 
     #[test]

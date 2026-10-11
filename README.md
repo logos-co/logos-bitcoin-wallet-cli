@@ -43,8 +43,9 @@ logosctl call bitcoin_wallet_cli send_status s1
 
 `send <address> <BTC>` asks for one payment at the normal fee target; `request_send` takes the
 backend's whole document, `smallChangeToFee` included, and `show` says when change went to the fee.
-`set_birthday '{"height":…}'` (or `{"date":"YYYY-MM-DD"}`) gives a restored wallet a birthday, and
-`probe '{"source":"…"}'` checks a source now, with its certificate. Amounts that look like numbers need `str:`, or `logosctl` passes a
+`set_birthday '{"height":…}'` (or `{"date":"YYYY-MM-DD"}`) gives a restored wallet a birthday,
+`probe '{"source":"…"}'` checks a source now, with its certificate, and
+`set_own_peers '{"network":"signet","peers":["…"]}'` and `peer_list` manage Kyoto's own peers. Amounts that look like numbers need `str:`, or `logosctl` passes a
 number and the call is refused.
 
 ## Events
@@ -56,7 +57,8 @@ number and the call is refused.
 | `queue_changed(count)` | how many sends await approval |
 
 They come from polling `list_sends` once a second, so a send another module asked for is
-announced too. An offer nobody acknowledges within 60 s expires; request the send again. A
+announced too. A poll the backend doesn't answer waits 100 ms, doubling to 5 s, and polling stops
+once unload begins. An offer nobody acknowledges within 60 s expires; request the send again. A
 send in `unknown` may have left: `show` offers `rebroadcast`, `request_fee_bump` and
 `abandon_send '{"txid":"…"}'`, which frees its coins (custodian only).
 

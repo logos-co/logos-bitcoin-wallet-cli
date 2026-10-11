@@ -54,6 +54,10 @@ pub trait BitcoinWalletCliModule: Send + Sync + 'static {
     fn set_source(&self, source_id: String, changes_json: String) -> String;
     fn set_proxy(&self, proxy: String) -> String;
     fn clear_suspect(&self, source_id: String) -> String;
+    /// `{ network, peers: [host[:port]] }`, at most 64; `[]` goes back to the curated list.
+    fn set_own_peers(&self, params_json: String) -> String;
+    /// `{ network? }`: the peer list, with `ownPeers`.
+    fn peer_list(&self, params_json: String) -> String;
     fn rebroadcast(&self, request_or_txid: String) -> String;
     /// `{ txid }` of a send in `unknown`: frees its coins; the reply's `note` says what that risks.
     fn abandon_send(&self, params_json: String) -> String;
@@ -90,11 +94,13 @@ use bitcoin_wallet_backend::BitcoinWalletBackendClient as Backend;
 /// The backend answers within its own budgets; this leaves the host's 20 s deadline intact.
 const BUDGET: Duration = Duration::from_secs(15);
 const POLL: Duration = Duration::from_millis(1000);
+/// The poll thread's calls give up sooner, so a vanished backend costs little.
+const POLL_BUDGET: Duration = Duration::from_secs(2);
 
 static UNLOADING: AtomicBool = AtomicBool::new(false);
 
 /// Waits for an async reply on this thread, never in a nested event loop; unload answers at once.
-fn wait<T>(rx: Receiver<Result<T, LogosError>>) -> Result<T, String> {
+fn wait<T>(rx: Receiver<Result<T, LogosError>>, budget: Duration) -> Result<T, String> {
     let start = Instant::now();
     loop {
         if UNLOADING.load(Ordering::SeqCst) {
@@ -102,19 +108,25 @@ fn wait<T>(rx: Receiver<Result<T, LogosError>>) -> Result<T, String> {
         }
         match rx.recv_timeout(Duration::from_millis(100)) {
             Ok(r) => return r.map_err(|e| e.to_string()),
-            Err(RecvTimeoutError::Timeout) if start.elapsed() < BUDGET + Duration::from_secs(1) => continue,
+            Err(RecvTimeoutError::Timeout) if start.elapsed() < budget + Duration::from_secs(1) => continue,
             Err(_) => return Err("no answer".into()),
         }
     }
 }
 
 macro_rules! call {
-    ($method:ident $(, $arg:expr)* $(,)?) => {{
+    ($method:ident $(, $arg:expr)* $(,)?) => {
+        call_within!(BUDGET, $method $(, $arg)*)
+    };
+}
+
+macro_rules! call_within {
+    ($budget:expr, $method:ident $(, $arg:expr)* $(,)?) => {{
         let (tx, rx) = sync_channel(1);
-        backend().$method($($arg,)* BUDGET, move |r| {
+        backend().$method($($arg,)* $budget, move |r| {
             let _ = tx.send(r);
         });
-        wait(rx)
+        wait(rx, $budget)
     }};
 }
 
@@ -151,6 +163,10 @@ fn status_of(id: &str) -> Option<Value> {
     call!(send_status_async_with_timeout, id).ok().and_then(|s| serde_json::from_str(&s).ok())
 }
 
+fn poll_status_of(id: &str) -> Option<Value> {
+    call_within!(POLL_BUDGET, send_status_async_with_timeout, id).ok().and_then(|s| serde_json::from_str(&s).ok())
+}
+
 #[derive(Default)]
 pub struct BitcoinWalletCliModuleImpl {
     watch: std::sync::Arc<std::sync::Mutex<Watch>>,
@@ -158,9 +174,9 @@ pub struct BitcoinWalletCliModuleImpl {
     poller: std::sync::Mutex<Option<JoinHandle<()>>>,
 }
 
-/// One poll of the backend's sends, turned into this module's events.
-fn poll(watch: &std::sync::Mutex<Watch>, awaiting: &std::sync::Mutex<Vec<String>>) {
-    let Ok(raw) = call!(list_sends_async_with_timeout) else { return };
+/// One poll of the backend's sends, turned into this module's events. False if it didn't answer.
+fn poll(watch: &std::sync::Mutex<Watch>, awaiting: &std::sync::Mutex<Vec<String>>) -> bool {
+    let Ok(raw) = call_within!(POLL_BUDGET, list_sends_async_with_timeout) else { return false };
     let v: Value = serde_json::from_str(&raw).unwrap_or(Value::Null);
     let rows = v["sends"].as_array().cloned().unwrap_or_default();
     let sends: Vec<Row> = rows
@@ -171,7 +187,7 @@ fn poll(watch: &std::sync::Mutex<Watch>, awaiting: &std::sync::Mutex<Vec<String>
         sends.iter().filter(|r| r.state == "awaiting_approval").map(|r| r.id.clone()).collect();
     let turn = watch.lock().unwrap_or_else(|e| e.into_inner()).turn(&sends);
     for id in turn.prompt {
-        if let Some(st) = status_of(&id) {
+        if let Some(st) = poll_status_of(&id) {
             emit_prompt(&id, &render::prompt(&st, ME));
         }
     }
@@ -181,6 +197,7 @@ fn poll(watch: &std::sync::Mutex<Watch>, awaiting: &std::sync::Mutex<Vec<String>
     if let Some(n) = turn.awaiting {
         emit_queue_changed(n as i64);
     }
+    true
 }
 
 impl BitcoinWalletCliModule for BitcoinWalletCliModuleImpl {
@@ -303,6 +320,12 @@ impl BitcoinWalletCliModule for BitcoinWalletCliModuleImpl {
     fn clear_suspect(&self, source_id: String) -> String {
         custodian(call!(clear_suspect_async_with_timeout, source_id.trim()))
     }
+    fn set_own_peers(&self, params_json: String) -> String {
+        custodian(call!(set_own_peers_async_with_timeout, &params_json))
+    }
+    fn peer_list(&self, params_json: String) -> String {
+        custodian(call!(peer_list_async_with_timeout, &params_json))
+    }
     fn rebroadcast(&self, request_or_txid: String) -> String {
         custodian(call!(rebroadcast_async_with_timeout, request_or_txid.trim()))
     }
@@ -342,14 +365,17 @@ impl BitcoinWalletCliModule for BitcoinWalletCliModuleImpl {
         let (watch, awaiting) = (self.watch.clone(), self.awaiting.clone());
         // Nothing outbound here: the poll thread's first call is a second away.
         let handle = std::thread::spawn(move || {
+            let mut pause = None;
             while !UNLOADING.load(Ordering::SeqCst) {
-                let until = Instant::now() + POLL;
+                // Each poll that gets no answer waits longer: 100 ms, doubling to 5 s.
+                let until = Instant::now() + pause.unwrap_or(POLL);
                 while Instant::now() < until && !UNLOADING.load(Ordering::SeqCst) {
                     std::thread::sleep(Duration::from_millis(50));
                 }
-                if !UNLOADING.load(Ordering::SeqCst) {
-                    poll(&watch, &awaiting);
+                if UNLOADING.load(Ordering::SeqCst) {
+                    break;
                 }
+                pause = crate::watch::backoff(pause, !poll(&watch, &awaiting));
             }
         });
         *self.poller.lock().unwrap_or_else(|e| e.into_inner()) = Some(handle);

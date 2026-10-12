@@ -44,6 +44,9 @@ logosctl call bitcoin_wallet_cli send_status s1
 `send <address> <BTC>` asks for one payment at the normal fee target; `request_send` takes the
 backend's whole document, `smallChangeToFee` included, and `show` says when change went to the fee.
 `set_birthday '{"height":…}'` (or `{"date":"YYYY-MM-DD"}`) gives a restored wallet a birthday,
+`set_gap_limit '{"gapLimit":100}'` (20 to 1000; `open_wallet` takes `gapLimit` too) sets how far past
+the last used address the wallet looks, and `status` shows `beyondGap`: coins found past that
+limit, kept out of the balance but still spendable,
 `probe '{"source":"…"}'` checks a source now, with its certificate, and
 `set_own_peers '{"network":"signet","peers":["…"]}'` and `peer_list` manage Kyoto's own peers. Amounts that look like numbers need `str:`, or `logosctl` passes a
 number and the call is refused.

@@ -1,6 +1,6 @@
 //! The blocks a person reads in a terminal. Logos-free and unit-tested.
 
-use serde_json::Value;
+use serde_json::{json, Value};
 
 fn s<'a>(v: &'a Value, k: &str) -> &'a str {
     v[k].as_str().unwrap_or("")
@@ -98,6 +98,21 @@ pub fn show(status: &Value, me: &str) -> String {
     out
 }
 
+/// The open wallet's coins past its gap limit, from the backend's balances: `{ count, sat, btc, note }`,
+/// or null with no wallet open, a busy wallet or a backend that doesn't say.
+pub fn beyond_gap(balances: &Value) -> Value {
+    let b = &balances["beyondGap"];
+    if balances["ok"] != true || balances["busy"] == true || b["count"].is_null() {
+        return Value::Null;
+    }
+    let count = b["count"].as_u64().unwrap_or(0);
+    let amount = balances["beyondGapBtc"].as_str().filter(|x| !x.is_empty()).map(String::from).unwrap_or_else(|| btc(s(b, "sat")));
+    let note = (count > 0).then(|| {
+        format!("{count} coin(s), {amount} BTC, beyond the gap limit: not in the balance, still spendable; set_gap_limit raises it")
+    });
+    json!({"count": count, "sat": b["sat"], "btc": amount, "note": note})
+}
+
 /// How the person decides an open, headless, with the keys CLI.
 pub fn open_next(handle: Option<&str>) -> String {
     let h = handle.unwrap_or("<sma_ handle from wallet_status>");
@@ -158,6 +173,19 @@ mod tests {
         let failed = show(&serde_json::json!({"requestId": "s3", "state": "failed", "error": "rejected", "errorCode": "rejected", "summary": null}), "bitcoin_wallet_cli");
         assert!(failed.contains("rejected [rejected]"));
         assert!(show(&awaiting(), "bitcoin_wallet_cli").contains("AWAITING APPROVAL"));
+    }
+
+    #[test]
+    fn status_shows_coins_beyond_the_gap() {
+        let b = json!({"ok": true, "busy": false, "beyondGap": {"count": 2, "sat": "12345"}, "beyondGapBtc": "0.00012345"});
+        let v = beyond_gap(&b);
+        assert_eq!((v["count"].clone(), v["sat"].clone(), v["btc"].clone()), (json!(2), json!("12345"), json!("0.00012345")));
+        assert!(v["note"].as_str().unwrap().contains("still spendable"));
+        let none = beyond_gap(&json!({"ok": true, "busy": false, "beyondGap": {"count": 0, "sat": "0"}, "beyondGapBtc": "0.00000000"}));
+        assert_eq!((none["count"].clone(), none["note"].clone()), (json!(0), Value::Null));
+        for unread in [json!({"ok": true, "busy": true, "beyondGap": {"count": null, "sat": ""}}), json!({"ok": false, "error": "no wallet is open"}), json!({"ok": true, "confirmed": "1"})] {
+            assert_eq!(beyond_gap(&unread), Value::Null, "{unread}");
+        }
     }
 
     #[test]

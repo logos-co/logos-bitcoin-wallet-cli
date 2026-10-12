@@ -17,8 +17,9 @@ use crate::watch::{Row, Watch};
 const ME: &str = "bitcoin_wallet_cli";
 
 pub trait BitcoinWalletCliModule: Send + Sync + 'static {
-    /// `{ ok, enrolled, identity, custodians, rolesFile, awaiting, fix }`: whether the backend holds
-    /// this module as a custodian, the sends awaiting approval, and the exact fix when it doesn't.
+    /// `{ ok, enrolled, identity, custodians, rolesFile, awaiting, fix, beyondGap }`: whether the backend
+    /// holds this module as a custodian, the sends awaiting approval, the exact fix when it doesn't, and
+    /// the open wallet's coins past its gap limit, `{ count, sat, btc, note }` (null without one).
     fn status(&self) -> String;
 
     fn caller_identity(&self) -> String;
@@ -43,13 +44,15 @@ pub trait BitcoinWalletCliModule: Send + Sync + 'static {
 
     /// Needs the custodian role, as do the methods down to rebroadcast.
     fn set_active_network(&self, network: String) -> String;
-    /// `{ network?, group?, family?, birthday?, label? }`. The reply adds `openHandle` and `next`:
+    /// `{ network?, group?, family?, birthday?, label?, gapLimit? }`. The reply adds `openHandle` and `next`:
     /// how the person decides the open with evm_keystore_cli.
     fn open_wallet(&self, params_json: String) -> String;
     fn close_wallet(&self) -> String;
     fn descriptors(&self) -> String;
     /// `{ date: "YYYY-MM-DD" }` or `{ height }`: the open wallet scans again from there.
     fn set_birthday(&self, params_json: String) -> String;
+    /// `{ gapLimit }`, 20 to 1000: the open wallet's gap limit; a raise scans again from the birthday.
+    fn set_gap_limit(&self, params_json: String) -> String;
     fn set_sources(&self, list_json: String) -> String;
     fn set_source(&self, source_id: String, changes_json: String) -> String;
     fn set_proxy(&self, proxy: String) -> String;
@@ -205,10 +208,12 @@ impl BitcoinWalletCliModule for BitcoinWalletCliModuleImpl {
         let id = identity();
         let held = enrolled(&id, ME);
         let awaiting = self.awaiting.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let balances = call_within!(POLL_BUDGET, balances_async_with_timeout).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
         json!({
             "ok": true, "enrolled": held, "identity": id["identity"], "custodians": id["custodians"],
             "rolesFile": id["rolesFile"], "awaiting": awaiting,
             "fix": if held { Value::Null } else { Value::String(fix(&id, ME)) },
+            "beyondGap": render::beyond_gap(&balances),
         })
         .to_string()
     }
@@ -307,6 +312,9 @@ impl BitcoinWalletCliModule for BitcoinWalletCliModuleImpl {
     }
     fn set_birthday(&self, params_json: String) -> String {
         custodian(call!(set_birthday_async_with_timeout, &params_json))
+    }
+    fn set_gap_limit(&self, params_json: String) -> String {
+        custodian(call!(set_gap_limit_async_with_timeout, &params_json))
     }
     fn set_sources(&self, list_json: String) -> String {
         custodian(call!(set_sources_async_with_timeout, &list_json))

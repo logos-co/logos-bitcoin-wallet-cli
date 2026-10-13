@@ -72,6 +72,6 @@ cd rust-lib && cargo test --no-default-features
 nix build .#lgx
 ```
 
-The backend has no published repository yet, so its contract is committed under
-`contracts/` and named by `dependency_overrides` in `metadata.json`. Regenerate it from the
+The backend's contract is committed under `contracts/` and named by `dependency_overrides` in
+`metadata.json`, so the module builds without the backend's sources. Regenerate it from the
 backend's `glue.rs` with `logos-lidl-gen --from-rust` when the backend's methods change.

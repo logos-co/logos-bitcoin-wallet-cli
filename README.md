@@ -2,8 +2,8 @@
 
 `bitcoin_wallet_cli`: headless Bitcoin wallet sessions for `logosctl`. It relays to
 `bitcoin_wallet_backend` as itself, because the backend refuses `logosctl`'s own host
-identity. It never handles a password: a person decides an open with `evm_keystore_cli` and
-approves a send with `evm_signer_cli`, the keystore's terminal apps.
+identity. It never handles a password: a person unlocks the wallet and allows an open with
+`evm_signer_cli`, and approves a send there too.
 
 ## Enrolling it
 
@@ -28,7 +28,7 @@ logosctl module load bitcoin_wallet_cli
 logosctl call bitcoin_wallet_cli status
 logosctl call bitcoin_wallet_cli set_active_network signet
 logosctl call bitcoin_wallet_cli open_wallet '{"family":"bitcoin"}'
-# → { ok, jobId, openHandle, next }: decide it with evm_keystore_cli, as `next` says
+# → { ok, jobId, openHandle, next }: unlock the wallet and allow it with evm_signer_cli, as `next` says
 logosctl call bitcoin_wallet_cli wallet_status
 logosctl call bitcoin_wallet_cli receive_address
 logosctl call bitcoin_wallet_cli balances

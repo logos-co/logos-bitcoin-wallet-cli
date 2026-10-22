@@ -8,7 +8,7 @@ pub mod watch;
 #[cfg(feature = "logos_module")]
 mod glue;
 
-/// No method takes a secret: approvals go through evm_signer_cli, opens through evm_keystore_cli.
+/// No method takes a secret: unlocks, opens and approvals go through evm_signer_cli.
 #[cfg(test)]
 mod contract {
     const BANNED: [&str; 12] = ["password", "passphrase", "phrase", "mnemonic", "seed", "secret", "key", "xprv", "tprv", "privkey", "wif", "pin"];

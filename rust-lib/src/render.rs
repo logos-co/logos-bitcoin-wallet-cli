@@ -113,13 +113,16 @@ pub fn beyond_gap(balances: &Value) -> Value {
     json!({"count": count, "sat": b["sat"], "btc": amount, "note": note})
 }
 
-/// How the person decides an open, headless, with the keys CLI.
+/// How the person allows an open, headless, with the signer CLI: its wallet unlocked first.
 pub fn open_next(handle: Option<&str>) -> String {
     let h = handle.unwrap_or("<sma_ handle from wallet_status>");
     format!(
-        "The person picks, creates or restores the wallet and approves the open in the keys app. Headless: \
-         logosctl call evm_keystore_cli access_requests; logosctl call evm_keystore_cli show_access {h}; \
-         logosctl call evm_keystore_cli approve_access @decision.json with {{handle, bundle_id, group?, password, unlock?}}"
+        "The person unlocks the wallet and allows the open in the Signer app. Headless: \
+         logosctl call evm_signer_cli wallets; \
+         logosctl call evm_signer_cli unlock_wallet @unlock.json with {{seed, way, holder?, secret?, passwords?}} \
+         (once per session, if it is locked); \
+         logosctl call evm_signer_cli show_open {h}; \
+         logosctl call evm_signer_cli approve_open {h} <bundle id> str:"
     )
 }
 
@@ -189,10 +192,12 @@ mod tests {
     }
 
     #[test]
-    fn the_open_hint_names_the_keys_cli() {
+    fn the_open_hint_names_the_signer_cli() {
         let t = open_next(Some("sma_00000001"));
-        assert!(t.contains("logosctl call evm_keystore_cli show_access sma_00000001"));
-        assert!(t.contains("approve_access @decision.json"));
+        assert!(t.contains("logosctl call evm_signer_cli unlock_wallet @unlock.json"));
+        assert!(t.contains("logosctl call evm_signer_cli show_open sma_00000001"));
+        assert!(t.contains("logosctl call evm_signer_cli approve_open sma_00000001 <bundle id> str:"));
+        assert!(!t.contains("password,"), "no password goes with the open itself");
         assert!(open_next(None).contains("wallet_status"));
     }
 }

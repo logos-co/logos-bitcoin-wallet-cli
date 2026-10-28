@@ -45,7 +45,7 @@ pub trait BitcoinWalletCliModule: Send + Sync + 'static {
     /// Needs the custodian role, as do the methods down to rebroadcast.
     fn set_active_network(&self, network: String) -> String;
     /// `{ network?, group?, family?, birthday?, label?, gapLimit? }`. The reply adds `openHandle` and `next`:
-    /// how the person decides the open with evm_keystore_cli.
+    /// how the person unlocks the wallet and allows the open with evm_signer_cli.
     fn open_wallet(&self, params_json: String) -> String;
     fn close_wallet(&self) -> String;
     fn descriptors(&self) -> String;

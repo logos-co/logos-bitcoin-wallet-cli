@@ -1,5 +1,5 @@
 module bitcoin_wallet_backend {
-  version "0.1.0"
+  version "0.2.0"
   depends []
 
   method configure(roles_json: tstr) -> tstr description "CUSTODIAN. Replaces the custodian set, `{ custodians }`: total (`{}` is nobody), unknown\nkeys refused, saved to roles.json. `{ ok, custodians }`."
